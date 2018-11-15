@@ -3,16 +3,14 @@
 namespace QUI\OAuth\Client;
 
 use GuzzleHttp\Exception\ClientException as GuzzleHttpClientException;
-use QUI;
 use League\OAuth2\Client\Token\AccessToken;
+use QUI\Cache\Manager as QUIQQERCacheManager;
 
 /**
  * REST API Client for CleverReach
  */
 class Client
 {
-    const TABLE_ACCESS_TOKENS = 'oauth_client_tokens';
-
     /**
      * REST API base url
      *
@@ -38,14 +36,43 @@ class Client
     protected $Provider;
 
     /**
+     * Cache name prefix for data that is cached in the QUIQQER cache
+     *
+     * @var string
+     */
+    protected $quiqqerCachePrefix = 'quiqqer/oauth-client/cache/';
+
+    /**
+     * Client settings
+     *
+     * @var array
+     */
+    protected $settings = [];
+
+    /**
      * Client constructor.
      *
      * @param string $baseUrl - The base URL for the REST API
      * @param string $clientId - OAuth Client-ID
      * @param string $clientSecret - OAuth Client secret
+     * @param array $settings (optional) - Additional client settings
      */
-    public function __construct($baseUrl, $clientId, $clientSecret)
+    public function __construct($baseUrl, $clientId, $clientSecret, $settings = [])
     {
+        $defaultSettings = [
+            /**
+             * Writable cache path where access tokens are stored in a file
+             *
+             * If this is set to false, the client will check if QUIQQER is installed and cache
+             * it via the QUIQQER cache manager.
+             *
+             * If in this case QUIQQER is not installed, access tokens are not cached and are
+             * retrieved via request in every new PHP runtime
+             */
+            'cachePath' => false
+        ];
+
+        $this->settings = array_merge($defaultSettings, $settings);
         $this->baseUrl  = rtrim($baseUrl, '/').'/'; // ensure trailing slash
         $this->clientId = $clientId;
 
@@ -131,6 +158,7 @@ class Client
      * Get AccessToken
      *
      * @return AccessToken
+     * @throws ClientException
      */
     protected function getAccessToken()
     {
@@ -138,44 +166,93 @@ class Client
             return $this->Token;
         }
 
-        // check if a token has been previously stored for the given baseUrl
-        $result = QUI::getDataBase()->fetch([
-            'select' => ['access_token'],
-            'from'   => self::TABLE_ACCESS_TOKENS,
-            'where'  => [
-                'client_id' => $this->clientId
-            ]
-        ]);
+        // check if a token has been previously stored for the given client id
+        $cacheName = 'access_token_'.$this->clientId;
+        $tokenData = $this->readFromCache($cacheName);
 
-        if (!empty($result)) {
-            $Token = new AccessToken(json_decode(current($result)));
+        if (!empty($tokenData)) {
+            $Token = new AccessToken(json_decode($tokenData));
 
             if (!$Token->hasExpired()) {
                 $this->Token = $Token;
                 return $this->Token;
             }
-
-            // delete expired token from database
-            QUI::getDataBase()->delete(
-                self::TABLE_ACCESS_TOKENS,
-                [
-                    'client_id' => $this->clientId
-                ]
-            );
         }
 
         // create new access token
         $this->Token = $this->Provider->getAccessToken('client_credentials');
 
         // save token to database
-        QUI::getDataBase()->insert(
-            self::TABLE_ACCESS_TOKENS,
-            [
-                'client_id'    => $this->clientId,
-                'access_token' => json_encode($this->Token->jsonSerialize())
-            ]
-        );
+        $this->writeToCache($cacheName, json_encode($this->Token->jsonSerialize()));
 
         return $this->Token;
+    }
+
+    /**
+     * Write data to a cache file or the QUIQQER cache
+     *
+     * @param string $name - Cache data identifier
+     * @param string $data - Cache data
+     * @return void
+     * @throws ClientException
+     */
+    protected function writeToCache(string $name, string $data)
+    {
+        // try to use QUIQQER cache manager
+        if (class_exists(QUIQQERCacheManager::class)) {
+            try {
+                QUIQQERCacheManager::set($this->quiqqerCachePrefix.$name, $data);
+            } catch (\Exception $Exception) {
+                throw new ClientException(
+                    $Exception->getMessage(),
+                    $Exception->getCode()
+                );
+            }
+
+            return;
+        }
+
+        // try to use filesystem
+        $cachePath = $this->settings['cachePath'];
+
+        if (empty($cachePath) || !is_dir($cachePath) || !is_writable($cachePath)) {
+            return;
+        }
+
+        $cacheFile = rtrim($cachePath, '/').'/cache_'.$name;
+        file_put_contents($cacheFile, $data);
+    }
+
+    /**
+     * Read data from a cache file or the QUIQQER cache
+     *
+     * @param string $name - Cache data identifier
+     * @return  string|false - Cache data or false if not found/cached
+     */
+    protected function readFromCache(string $name)
+    {
+        // try to use QUIQQER cache manager
+        if (class_exists(QUIQQERCacheManager::class)) {
+            try {
+                return QUIQQERCacheManager::get($this->quiqqerCachePrefix.$name);
+            } catch (\Exception $Exception) {
+                return false;
+            }
+        }
+
+        // try to use filesystem
+        $cachePath = $this->settings['cachePath'];
+
+        if (empty($cachePath) || !is_dir($cachePath) || !is_readable($cachePath)) {
+            return false;
+        }
+
+        $cacheFile = rtrim($cachePath, '/').'/cache_'.$name;
+
+        if (!file_exists($cacheFile) || is_readable($cacheFile)) {
+            return false;
+        }
+
+        return file_get_contents($cacheFile);
     }
 }

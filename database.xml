@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<database>
+
+    <global>
+        <table name="oauth_client_tokens">
+            <field type="TEXT NOT NULL">client_id</field>
+            <field type="TEXT NOT NULL">access_token</field>
+        </table>
+    </global>
+
+</database>

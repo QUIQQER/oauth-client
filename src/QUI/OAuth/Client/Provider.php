@@ -89,14 +89,19 @@ class Provider extends AbstractProvider
      * Checks a provider response for errors.
      *
      * @throws IdentityProviderException
-     * @param  ResponseInterface $response
+     * @param  ResponseInterface $Response
      * @param  array|string $data Parsed response data
      * @return void
      */
-    protected function checkResponse(ResponseInterface $response, $data)
+    protected function checkResponse(ResponseInterface $Response, $data)
     {
-        \QUI\System\Log::writeRecursive("checkResponse oauth-client");
-        \QUI\System\Log::writeRecursive($data);
+        if ($Response->getStatusCode() === 404) {
+            throw new IdentityProviderException(
+                'QUIQQER REST API -> Request path not found. Please check your Client settings.',
+                404,
+                $data
+            );
+        }
     }
 
     /**

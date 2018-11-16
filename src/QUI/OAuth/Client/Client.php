@@ -4,6 +4,7 @@ namespace QUI\OAuth\Client;
 
 use GuzzleHttp\Exception\ClientException as GuzzleHttpClientException;
 use League\OAuth2\Client\Token\AccessToken;
+use QUI;
 use QUI\Cache\Manager as QUIQQERCacheManager;
 
 /**
@@ -67,7 +68,7 @@ class Client
              * it via the QUIQQER cache manager.
              *
              * If in this case QUIQQER is not installed, access tokens are not cached and are
-             * retrieved via request in every new PHP runtime
+             * retrieved freshly for every REST request
              */
             'cachePath' => false
         ];
@@ -89,14 +90,19 @@ class Client
      *
      * @param string $path - Request path
      * @param array $params (optional) - GET parameters
-     * @return array - Response data
-     * @throws ClientException
+     * @return string - Response data
      */
     public function getRequest(string $path, array $params = [])
     {
-        $query = http_build_query(array_merge([
-            'token' => $this->getAccessToken()->getToken()
-        ], $params));
+        try {
+            $query = http_build_query(array_merge([
+                'access_token' => $this->getAccessToken()->getToken()
+            ], $params));
+        } catch (\Exception $Exception) {
+            return $this->getExceptionResponse($Exception);
+        }
+
+        $path = ltrim($path, '/');
 
         $Request = $this->Provider->getRequest(
             'GET',
@@ -105,16 +111,11 @@ class Client
 
         try {
             $Response = $this->Provider->getResponse($Request);
-        } catch (GuzzleHttpClientException $Exception) {
-            $exBody = json_decode($Exception->getResponse()->getBody()->getContents(), true);
-
-            throw new ClientException(
-                $exBody['error']['message'],
-                $exBody['error']['code']
-            );
+        } catch (\Exception $Exception) {
+            return $this->getExceptionResponse($Exception);
         }
 
-        return json_decode($Response->getBody()->getContents(), true);
+        return $Response->getBody()->getContents();
     }
 
     /**
@@ -122,43 +123,41 @@ class Client
      *
      * @param string $path - Request path
      * @param string $data (optional) - Additional POST data
-     * @return array - Response data
-     * @throws ClientException
+     * @return string - Response data
      */
     public function postRequest(string $path, string $data = null)
     {
-        $query = http_build_query([
-            'token' => $this->getAccessToken()->getToken()
-        ]);
+        try {
+            $query = http_build_query([
+                'access_token' => $this->getAccessToken()->getToken()
+            ]);
+        } catch (\Exception $Exception) {
+            return $this->getExceptionResponse($Exception);
+        }
+
+        $path = ltrim($path, '/');
 
         $Request = $this->Provider->getRequest(
             'POST',
-            $this->baseUrl.$path.'?'.$query
+            $this->baseUrl.$path.'?'.$query,
+            [
+                'body' => $data
+            ]
         );
-
-        if (is_string($data)) {
-            $Request->getBody()->write($data);
-        }
 
         try {
             $Response = $this->Provider->getResponse($Request);
-        } catch (GuzzleHttpClientException $Exception) {
-            $exBody = json_decode($Exception->getResponse()->getBody()->getContents(), true);
-
-            throw new ClientException(
-                $exBody['error']['message'],
-                $exBody['error']['code']
-            );
+        } catch (\Exception $Exception) {
+            return $this->getExceptionResponse($Exception);
         }
 
-        return json_decode($Response->getBody()->getContents(), true);
+        return $Response->getBody()->getContents();
     }
 
     /**
      * Get AccessToken
      *
      * @return AccessToken
-     * @throws ClientException
      */
     protected function getAccessToken()
     {
@@ -166,12 +165,12 @@ class Client
             return $this->Token;
         }
 
-        // check if a token has been previously stored for the given client id
+        // check token cache
         $cacheName = 'access_token_'.$this->clientId;
         $tokenData = $this->readFromCache($cacheName);
 
         if (!empty($tokenData)) {
-            $Token = new AccessToken(json_decode($tokenData));
+            $Token = new AccessToken(json_decode($tokenData, true));
 
             if (!$Token->hasExpired()) {
                 $this->Token = $Token;
@@ -182,7 +181,7 @@ class Client
         // create new access token
         $this->Token = $this->Provider->getAccessToken('client_credentials');
 
-        // save token to database
+        // cache token
         $this->writeToCache($cacheName, json_encode($this->Token->jsonSerialize()));
 
         return $this->Token;
@@ -194,33 +193,26 @@ class Client
      * @param string $name - Cache data identifier
      * @param string $data - Cache data
      * @return void
-     * @throws ClientException
      */
     protected function writeToCache(string $name, string $data)
     {
+        // try to use filesystem
+        $cachePath = $this->settings['cachePath'];
+
+        if (!empty($cachePath) && is_dir($cachePath) && is_writable($cachePath)) {
+            $cacheFile = rtrim($cachePath, '/').'/cache_'.$name;
+            file_put_contents($cacheFile, $data);
+            return;
+        }
+
         // try to use QUIQQER cache manager
         if (class_exists(QUIQQERCacheManager::class)) {
             try {
                 QUIQQERCacheManager::set($this->quiqqerCachePrefix.$name, $data);
             } catch (\Exception $Exception) {
-                throw new ClientException(
-                    $Exception->getMessage(),
-                    $Exception->getCode()
-                );
+                QUI\System\Log::writeException($Exception);
             }
-
-            return;
         }
-
-        // try to use filesystem
-        $cachePath = $this->settings['cachePath'];
-
-        if (empty($cachePath) || !is_dir($cachePath) || !is_writable($cachePath)) {
-            return;
-        }
-
-        $cacheFile = rtrim($cachePath, '/').'/cache_'.$name;
-        file_put_contents($cacheFile, $data);
     }
 
     /**
@@ -231,6 +223,19 @@ class Client
      */
     protected function readFromCache(string $name)
     {
+        // try to use filesystem
+        $cachePath = $this->settings['cachePath'];
+
+        if (!empty($cachePath) && is_dir($cachePath) && is_readable($cachePath)) {
+            $cacheFile = rtrim($cachePath, '/').'/cache_'.$name;
+
+            if (!file_exists($cacheFile) || !is_readable($cacheFile)) {
+                return false;
+            }
+
+            return file_get_contents($cacheFile);
+        }
+
         // try to use QUIQQER cache manager
         if (class_exists(QUIQQERCacheManager::class)) {
             try {
@@ -240,19 +245,21 @@ class Client
             }
         }
 
-        // try to use filesystem
-        $cachePath = $this->settings['cachePath'];
+        return false;
+    }
 
-        if (empty($cachePath) || !is_dir($cachePath) || !is_readable($cachePath)) {
-            return false;
-        }
-
-        $cacheFile = rtrim($cachePath, '/').'/cache_'.$name;
-
-        if (!file_exists($cacheFile) || is_readable($cacheFile)) {
-            return false;
-        }
-
-        return file_get_contents($cacheFile);
+    /**
+     * Get a response from an exception
+     *
+     * @param \Exception $Exception
+     * @return string - JSON
+     */
+    protected function getExceptionResponse(\Exception $Exception)
+    {
+        return json_encode([
+            'error'             => true,
+            'error_description' => $Exception->getMessage(),
+            'error_code'        => $Exception->getCode()
+        ]);
     }
 }

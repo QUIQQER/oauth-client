@@ -54,12 +54,19 @@ class Client
      * Client constructor.
      *
      * @param string $baseUrl - The base URL for the REST API
-     * @param string $clientId - OAuth Client-ID
-     * @param string $clientSecret - OAuth Client secret
+     * @param string $clientId (optional) - OAuth Client-ID
+     * @param string $clientSecret (optional) - OAuth Client secret
      * @param array $settings (optional) - Additional client settings
+     * @throws ClientException
      */
-    public function __construct($baseUrl, $clientId, $clientSecret, $settings = [])
+    public function __construct($baseUrl, $clientId = null, $clientSecret = null, $settings = [])
     {
+        if (empty($baseUrl)) {
+            throw new ClientException(
+                'Please provide a valid REST API URL.'
+            );
+        }
+
         $defaultSettings = [
             /**
              * Writable cache path where access tokens are stored in a file
@@ -68,7 +75,7 @@ class Client
              * it via the QUIQQER cache manager.
              *
              * If in this case QUIQQER is not installed, access tokens are not cached and are
-             * retrieved freshly for every REST request
+             * retrieved freshly for every REST request (if authentication is required)
              */
             'cachePath' => false
         ];
@@ -90,23 +97,28 @@ class Client
      *
      * @param string $path - Request path
      * @param array $params (optional) - GET parameters
+     * @param bool $authentication (optional) - Perform OAuth 2.0 authentication; this is TRUE by default
+     * but may be disabled if a REST API endpoint does not require authentication
      * @return string - Response data
      */
-    public function getRequest(string $path, array $params = [])
+    public function getRequest(string $path, array $params = [], $authentication = true)
     {
-        try {
-            $query = http_build_query(array_merge([
-                'access_token' => $this->getAccessToken()->getToken()
-            ], $params));
-        } catch (\Exception $Exception) {
-            return $this->getExceptionResponse($Exception);
+        $path       = ltrim($path, '/');
+        $requestUrl = $this->baseUrl.$path;
+
+        if ($authentication) {
+            try {
+                $params['access_token'] = $this->getAccessToken()->getToken();
+            } catch (\Exception $Exception) {
+                return $this->getExceptionResponse($Exception);
+            }
         }
 
-        $path = ltrim($path, '/');
+        $requestUrl .= '?'.http_build_query($params);
 
         $Request = $this->Provider->getRequest(
             'GET',
-            $this->baseUrl.$path.'?'.$query
+            $requestUrl
         );
 
         try {
@@ -123,23 +135,30 @@ class Client
      *
      * @param string $path - Request path
      * @param string $data (optional) - Additional POST data
+     * @param bool $authentication (optional) - Perform OAuth 2.0 authentication; this is TRUE by default
+     * but may be disabled if a REST API endpoint does not require authentication
      * @return string - Response data
      */
-    public function postRequest(string $path, string $data = null)
+    public function postRequest(string $path, string $data = null, $authentication = true)
     {
-        try {
-            $query = http_build_query([
-                'access_token' => $this->getAccessToken()->getToken()
-            ]);
-        } catch (\Exception $Exception) {
-            return $this->getExceptionResponse($Exception);
-        }
+        $path       = ltrim($path, '/');
+        $requestUrl = $this->baseUrl.$path;
 
-        $path = ltrim($path, '/');
+        if ($authentication) {
+            try {
+                $query = http_build_query([
+                    'access_token' => $this->getAccessToken()->getToken()
+                ]);
+
+                $requestUrl .= '?'.$query;
+            } catch (\Exception $Exception) {
+                return $this->getExceptionResponse($Exception);
+            }
+        }
 
         $Request = $this->Provider->getRequest(
             'POST',
-            $this->baseUrl.$path.'?'.$query,
+            $requestUrl,
             [
                 'body' => $data
             ]

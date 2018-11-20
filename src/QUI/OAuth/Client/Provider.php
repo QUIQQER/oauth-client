@@ -97,7 +97,7 @@ class Provider extends AbstractProvider
     {
         if ($Response->getStatusCode() === 404) {
             throw new IdentityProviderException(
-                'QUIQQER REST API -> Request path not found. Please check your Client settings.',
+                'Request path not found. Please check your Client settings.',
                 404,
                 $data
             );

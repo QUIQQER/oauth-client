@@ -77,7 +77,11 @@ class Client
              * If in this case QUIQQER is not installed, access tokens are not cached and are
              * retrieved freshly for every REST request (if authentication is required)
              */
-            'cachePath' => false
+            'cachePath' => false,
+            /**
+             * Default request timeout in seconds
+             */
+            'timeout'   => 60
         ];
 
         $this->settings = array_merge($defaultSettings, $settings);
@@ -86,7 +90,8 @@ class Client
 
         $this->Provider = new Provider([
             'clientId'     => $clientId,
-            'clientSecret' => $clientSecret
+            'clientSecret' => $clientSecret,
+            'timeout'      => (int)$this->settings['timeout']
         ]);
 
         $this->Provider->setBaseUrl($this->baseUrl);
@@ -134,12 +139,12 @@ class Client
      * Perform a POST request
      *
      * @param string $path - Request path
-     * @param string $data (optional) - Additional POST data
+     * @param string|array $data (optional) - Additional POST data
      * @param bool $authentication (optional) - Perform OAuth 2.0 authentication; this is TRUE by default
      * but may be disabled if a REST API endpoint does not require authentication
      * @return string - Response data
      */
-    public function postRequest(string $path, string $data = null, $authentication = true)
+    public function postRequest(string $path, $data = null, $authentication = true)
     {
         $path       = ltrim($path, '/');
         $requestUrl = $this->baseUrl.$path;
@@ -154,6 +159,10 @@ class Client
             } catch (\Exception $Exception) {
                 return $this->getExceptionResponse($Exception);
             }
+        }
+
+        if (is_array($data)) {
+            $data = json_encode($data);
         }
 
         $Request = $this->Provider->getRequest(

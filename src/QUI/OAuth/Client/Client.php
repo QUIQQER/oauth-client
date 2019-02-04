@@ -2,7 +2,6 @@
 
 namespace QUI\OAuth\Client;
 
-use GuzzleHttp\Exception\ClientException as GuzzleHttpClientException;
 use League\OAuth2\Client\Token\AccessToken;
 use QUI;
 use QUI\Cache\Manager as QUIQQERCacheManager;
@@ -176,7 +175,14 @@ class Client
         try {
             $Response = $this->Provider->getResponse($Request);
         } catch (\Exception $Exception) {
-            return $this->getExceptionResponse($Exception);
+            if ($Exception instanceof \GuzzleHttp\Exception\ClientException) {
+                return $this->getExceptionResponse(new \Exception(
+                    $Exception->getResponse()->getBody()->getContents(),
+                    $Exception->getCode()
+                ));
+            } else {
+                return $this->getExceptionResponse($Exception);
+            }
         }
 
         return $Response->getBody()->getContents();

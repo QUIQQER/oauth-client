@@ -50,6 +50,13 @@ class Client
     protected $settings = [];
 
     /**
+     * Flag that indicates if a request has been retried ONCE.
+     *
+     * @var bool
+     */
+    protected $failureRetry = false;
+
+    /**
      * Client constructor.
      *
      * @param string $baseUrl - The base URL for the REST API
@@ -76,11 +83,19 @@ class Client
              * If in this case QUIQQER is not installed, access tokens are not cached and are
              * retrieved freshly for every REST request (if authentication is required)
              */
-            'cachePath' => false,
+            'cachePath'  => false,
+
             /**
              * Default request timeout in seconds
              */
-            'timeout'   => 60
+            'timeout'    => 60,
+
+            /**
+             * Retry POST/GET request ONCE if a 503 response is returned.
+             *
+             * Waits 1 second before retrying.
+             */
+            'retryOn503' => true
         ];
 
         $this->settings = array_merge($defaultSettings, $settings);
@@ -127,9 +142,34 @@ class Client
 
         try {
             $Response = $this->Provider->getResponse($Request);
+
+            if ($this->settings['retryOn503'] && $Response->getStatusCode() === 503 && !$this->failureRetry) {
+                $this->failureRetry = true;
+                sleep(1);
+                return $this->getRequest($path, $params, $authentication);
+            }
         } catch (\Exception $Exception) {
-            return $this->getExceptionResponse($Exception);
+            if ($Exception instanceof \GuzzleHttp\Exception\ClientException) {
+                if ($this->settings['retryOn503'] && $Exception->getCode() === 503 && !$this->failureRetry) {
+                    $this->failureRetry = true;
+                    sleep(1);
+                    return $this->getRequest($path, $params, $authentication);
+                }
+
+                $this->failureRetry = false;
+
+                return $this->getExceptionResponse(new \Exception(
+                    $Exception->getResponse()->getBody()->getContents(),
+                    $Exception->getCode()
+                ));
+            } else {
+                $this->failureRetry = false;
+
+                return $this->getExceptionResponse($Exception);
+            }
         }
+
+        $this->failureRetry = false;
 
         return $Response->getBody()->getContents();
     }
@@ -174,16 +214,34 @@ class Client
 
         try {
             $Response = $this->Provider->getResponse($Request);
+
+            if ($this->settings['retryOn503'] && $Response->getStatusCode() === 503 && !$this->failureRetry) {
+                $this->failureRetry = true;
+                sleep(1);
+                return $this->postRequest($path, $data, $authentication);
+            }
         } catch (\Exception $Exception) {
             if ($Exception instanceof \GuzzleHttp\Exception\ClientException) {
+                if ($this->settings['retryOn503'] && $Exception->getCode() === 503 && !$this->failureRetry) {
+                    $this->failureRetry = true;
+                    sleep(1);
+                    return $this->postRequest($path, $data, $authentication);
+                }
+
+                $this->failureRetry = false;
+
                 return $this->getExceptionResponse(new \Exception(
                     $Exception->getResponse()->getBody()->getContents(),
                     $Exception->getCode()
                 ));
             } else {
+                $this->failureRetry = false;
+
                 return $this->getExceptionResponse($Exception);
             }
         }
+
+        $this->failureRetry = false;
 
         return $Response->getBody()->getContents();
     }

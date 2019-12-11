@@ -1,26 +1,25 @@
 {
-  "name": "quiqqer/oauth-client",
-  "description": "Make requests to QUIQQER REST APIs via OAuth authentication",
-  "version": "dev-dev",
-  "license": "GPL-3.0+",
-  "authors": [
-    {
-      "name": "Patrick Müller",
-      "email": "p.mueller@pcsg.de",
-      "homepage": "https://www.pcsg.de",
-      "role": "Developer"
+    "name": "quiqqer\/oauth-client",
+    "description": "Make requests to QUIQQER REST APIs via OAuth authentication",
+    "license": "GPL-3.0+",
+    "authors": [
+        {
+            "name": "Patrick M\u00fcller",
+            "email": "p.mueller@pcsg.de",
+            "homepage": "https:\/\/www.pcsg.de",
+            "role": "Developer"
+        }
+    ],
+    "support": {
+        "email": "support@pcsg.de",
+        "url": "http:\/\/www.pcsg.de"
+    },
+    "require": {
+        "league\/oauth2-client": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "QUI\\OAuth\\Client\\": "src\/QUI\/OAuth\/Client"
+        }
     }
-  ],
-  "support": {
-    "email": "support@pcsg.de",
-    "url": "http://www.pcsg.de"
-  },
-  "require": {
-    "league/oauth2-client": "^2.0"
-  },
-  "autoload": {
-    "psr-4": {
-      "QUI\\OAuth\\Client\\": "src/QUI/OAuth/Client"
-    }
-  }
 }

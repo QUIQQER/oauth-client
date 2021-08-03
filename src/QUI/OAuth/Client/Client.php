@@ -204,11 +204,20 @@ class Client
             $data = json_encode($data);
         }
 
+        if (QUI\REST\Utils\RequestUtils::isJson($data)) {
+            $contentType = 'application/json';
+        } else {
+            $contentType = 'application/x-www-form-urlencoded';
+        }
+
         $Request = $this->Provider->getRequest(
             'POST',
             $requestUrl,
             [
-                'body' => $data
+                'headers' => [
+                    'Content-Type' => $contentType
+                ],
+                'body'    => $data
             ]
         );
 

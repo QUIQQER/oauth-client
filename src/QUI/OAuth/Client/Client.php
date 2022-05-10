@@ -256,6 +256,88 @@ class Client
     }
 
     /**
+     * Perform a request with specified method
+     *
+     * @param string $method - POST, GET, PUT, PATCH, DELETE
+     * @param string $path - Request path
+     * @param string|array $data (optional) - Additional POST data
+     * @param bool $authentication (optional) - Perform OAuth 2.0 authentication; this is TRUE by default
+     * but may be disabled if a REST API endpoint does not require authentication
+     * @return string - Response data
+     */
+    public function request(string $method, string $path, $data = null, bool $authentication = true): string
+    {
+        $path       = ltrim($path, '/');
+        $requestUrl = $this->baseUrl.$path;
+
+        if ($authentication) {
+            try {
+                $query = http_build_query([
+                    'access_token' => $this->getAccessToken()->getToken()
+                ]);
+
+                $requestUrl .= '?'.$query;
+            } catch (\Exception $Exception) {
+                return $this->getExceptionResponse($Exception);
+            }
+        }
+
+        if (is_array($data)) {
+            $data = json_encode($data);
+        }
+
+        if (QUI\REST\Utils\RequestUtils::isJson($data)) {
+            $contentType = 'application/json';
+        } else {
+            $contentType = 'application/x-www-form-urlencoded';
+        }
+
+        $Request = $this->Provider->getRequest(
+            $method,
+            $requestUrl,
+            [
+                'headers' => [
+                    'Content-Type' => $contentType
+                ],
+                'body'    => $data
+            ]
+        );
+
+        try {
+            $Response = $this->Provider->getResponse($Request);
+
+            if ($this->settings['retryOn503'] && $Response->getStatusCode() === 503 && !$this->failureRetry) {
+                $this->failureRetry = true;
+                sleep(1);
+                return $this->postRequest($path, $data, $authentication);
+            }
+        } catch (\Exception $Exception) {
+            if ($Exception instanceof \GuzzleHttp\Exception\ClientException) {
+                if ($this->settings['retryOn503'] && $Exception->getCode() === 503 && !$this->failureRetry) {
+                    $this->failureRetry = true;
+                    sleep(1);
+                    return $this->postRequest($path, $data, $authentication);
+                }
+
+                $this->failureRetry = false;
+
+                return $this->getExceptionResponse(new \Exception(
+                    $Exception->getResponse()->getBody()->getContents(),
+                    $Exception->getCode()
+                ));
+            } else {
+                $this->failureRetry = false;
+
+                return $this->getExceptionResponse($Exception);
+            }
+        }
+
+        $this->failureRetry = false;
+
+        return $Response->getBody()->getContents();
+    }
+
+    /**
      * Get AccessToken
      *
      * @return AccessToken

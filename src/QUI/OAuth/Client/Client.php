@@ -279,9 +279,14 @@ class Client
 
         if ($authentication) {
             try {
-                $query = http_build_query([
-                    'access_token' => $this->getAccessToken()->getToken()
-                ]);
+                $query = http_build_query(
+                    \array_merge(
+                        $this->globalRequestParams,
+                        [
+                            'access_token' => $this->getAccessToken()->getToken()
+                        ]
+                    )
+                );
 
                 $requestUrl .= '?'.$query;
             } catch (\Exception $Exception) {
@@ -303,7 +308,6 @@ class Client
             $method,
             $requestUrl,
             \array_merge([
-                $this->globalRequestParams,
                 'headers' => [
                     'Content-Type' => $contentType
                 ],

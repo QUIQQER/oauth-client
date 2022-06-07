@@ -57,6 +57,13 @@ class Client
     protected $failureRetry = false;
 
     /**
+     * Globals parameters that are sent with every request.
+     *
+     * @var array
+     */
+    protected $globalRequestParams = [];
+
+    /**
      * Client constructor.
      *
      * @param string $baseUrl - The base URL for the REST API
@@ -295,12 +302,13 @@ class Client
         $Request = $this->Provider->getRequest(
             $method,
             $requestUrl,
-            [
+            \array_merge([
+                $this->globalRequestParams,
                 'headers' => [
                     'Content-Type' => $contentType
                 ],
-                'body'    => $data
-            ]
+                'body'    => $data,
+            ])
         );
 
         try {
@@ -338,6 +346,24 @@ class Client
     }
 
     /**
+     * @param array $globalRequestParams
+     */
+    public function setGlobalRequestParams(array $globalRequestParams): void
+    {
+        $this->globalRequestParams = $globalRequestParams;
+    }
+
+    /**
+     * @param string $key
+     * @param mixed $value
+     * @return void
+     */
+    public function setGlobalRequestParam(string $key, $value): void
+    {
+        $this->globalRequestParams[$key] = $value;
+    }
+
+    /**
      * Get AccessToken
      *
      * @return AccessToken
@@ -362,7 +388,7 @@ class Client
         }
 
         // create new access token
-        $this->Token = $this->Provider->getAccessToken('client_credentials');
+        $this->Token = $this->Provider->getAccessToken('client_credentials', $this->globalRequestParams);
 
         // cache token
         $this->writeToCache($cacheName, json_encode($this->Token->jsonSerialize()));

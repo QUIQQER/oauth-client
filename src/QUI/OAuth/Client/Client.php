@@ -5,6 +5,11 @@ namespace QUI\OAuth\Client;
 use League\OAuth2\Client\Token\AccessToken;
 use QUI;
 use QUI\Cache\Manager as QUIQQERCacheManager;
+use function is_array;
+use function is_string;
+use function json_decode;
+use function json_last_error;
+use const JSON_ERROR_NONE;
 
 /**
  * REST API Client for CleverReach
@@ -211,7 +216,7 @@ class Client
             $data = json_encode($data);
         }
 
-        if (QUI\REST\Utils\RequestUtils::isJson($data)) {
+        if ($this->isJson($data)) {
             $contentType = 'application/json';
         } else {
             $contentType = 'application/x-www-form-urlencoded';
@@ -298,7 +303,7 @@ class Client
             $data = json_encode($data);
         }
 
-        if (QUI\REST\Utils\RequestUtils::isJson($data)) {
+        if ($this->isJson($data)) {
             $contentType = 'application/json';
         } else {
             $contentType = 'application/x-www-form-urlencoded';
@@ -474,5 +479,21 @@ class Client
             'error_description' => $Exception->getMessage(),
             'error_code'        => $Exception->getCode()
         ]);
+    }
+
+    /**
+     * Check if a string is in JSON format
+     *
+     * @param mixed $str
+     * @return bool
+     */
+    protected function isJson($str): bool
+    {
+        if (!is_string($str)) {
+            return false;
+        }
+
+        $str = json_decode($str, true);
+        return json_last_error() === JSON_ERROR_NONE && is_array($str);
     }
 }

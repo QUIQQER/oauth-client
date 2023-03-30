@@ -1,6 +1,7 @@
 {
     "name": "quiqqer\/oauth-client",
     "description": "Make requests to QUIQQER REST APIs via OAuth authentication",
+    "version": "0.1.0",
     "license": "GPL-3.0+",
     "authors": [
         {

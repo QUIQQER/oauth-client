@@ -1,0 +1,11 @@
+parameters:
+	ignoreErrors:
+		-
+			message: "#^Call to function is_null\\(\\) with League\\\\OAuth2\\\\Client\\\\Token\\\\AccessToken will always evaluate to false\\.$#"
+			count: 1
+			path: src/QUI/OAuth/Client/Client.php
+
+		-
+			message: "#^Property QUI\\\\OAuth\\\\Client\\\\Client\\:\\:\\$Token \\(League\\\\OAuth2\\\\Client\\\\Token\\\\AccessToken\\) does not accept League\\\\OAuth2\\\\Client\\\\Token\\\\AccessTokenInterface\\.$#"
+			count: 1
+			path: src/QUI/OAuth/Client/Client.php

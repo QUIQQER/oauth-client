@@ -30,7 +30,7 @@ class Provider extends AbstractProvider
      */
     public function setBaseUrl(string $baseUrl): void
     {
-        $this->baseUrl = rtrim($baseUrl, '/').'/';  // ensure trailing slash
+        $this->baseUrl = rtrim($baseUrl, '/') . '/';  // ensure trailing slash
     }
 
     /**
@@ -57,7 +57,7 @@ class Provider extends AbstractProvider
      */
     public function getBaseAccessTokenUrl(array $params)
     {
-        return $this->baseUrl.'oauth/token';
+        return $this->baseUrl . 'oauth/token';
     }
 
     /**

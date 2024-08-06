@@ -5,10 +5,12 @@ namespace QUI\OAuth\Client;
 use League\OAuth2\Client\Token\AccessToken;
 use QUI;
 use QUI\Cache\Manager as QUIQQERCacheManager;
+
 use function is_array;
 use function is_string;
 use function json_decode;
 use function json_last_error;
+
 use const JSON_ERROR_NONE;
 
 /**
@@ -111,7 +113,7 @@ class Client
         ];
 
         $this->settings = array_merge($defaultSettings, $settings);
-        $this->baseUrl  = rtrim($baseUrl, '/').'/'; // ensure trailing slash
+        $this->baseUrl  = rtrim($baseUrl, '/') . '/'; // ensure trailing slash
         $this->clientId = $clientId;
 
         $this->Provider = new Provider([
@@ -135,7 +137,7 @@ class Client
     public function getRequest(string $path, array $params = [], $authentication = true)
     {
         $path       = ltrim($path, '/');
-        $requestUrl = $this->baseUrl.$path;
+        $requestUrl = $this->baseUrl . $path;
 
         if ($authentication) {
             try {
@@ -145,7 +147,7 @@ class Client
             }
         }
 
-        $requestUrl .= '?'.http_build_query($params);
+        $requestUrl .= '?' . http_build_query($params);
 
         $Request = $this->Provider->getRequest(
             'GET',
@@ -198,7 +200,7 @@ class Client
     public function postRequest(string $path, $data = null, $authentication = true)
     {
         $path       = ltrim($path, '/');
-        $requestUrl = $this->baseUrl.$path;
+        $requestUrl = $this->baseUrl . $path;
 
         if ($authentication) {
             try {
@@ -206,7 +208,7 @@ class Client
                     'access_token' => $this->getAccessToken()->getToken()
                 ]);
 
-                $requestUrl .= '?'.$query;
+                $requestUrl .= '?' . $query;
             } catch (\Exception $Exception) {
                 return $this->getExceptionResponse($Exception);
             }
@@ -280,7 +282,7 @@ class Client
     public function request(string $method, string $path, $data = null, bool $authentication = true): string
     {
         $path       = ltrim($path, '/');
-        $requestUrl = $this->baseUrl.$path;
+        $requestUrl = $this->baseUrl . $path;
 
         if ($authentication) {
             try {
@@ -293,7 +295,7 @@ class Client
                     )
                 );
 
-                $requestUrl .= '?'.$query;
+                $requestUrl .= '?' . $query;
             } catch (\Exception $Exception) {
                 return $this->getExceptionResponse($Exception);
             }
@@ -384,7 +386,7 @@ class Client
         }
 
         // check token cache
-        $cacheName = 'access_token_'.$this->clientId;
+        $cacheName = 'access_token_' . $this->clientId;
         $tokenData = $this->readFromCache($cacheName);
 
         if (!empty($tokenData)) {
@@ -418,7 +420,7 @@ class Client
         $cachePath = $this->settings['cachePath'];
 
         if (!empty($cachePath) && is_dir($cachePath) && is_writable($cachePath)) {
-            $cacheFile = rtrim($cachePath, '/').'/cache_'.$name;
+            $cacheFile = rtrim($cachePath, '/') . '/cache_' . $name;
             file_put_contents($cacheFile, $data);
             return;
         }
@@ -426,7 +428,7 @@ class Client
         // try to use QUIQQER cache manager
         if (class_exists(QUIQQERCacheManager::class)) {
             try {
-                QUIQQERCacheManager::set($this->quiqqerCachePrefix.$name, $data);
+                QUIQQERCacheManager::set($this->quiqqerCachePrefix . $name, $data);
             } catch (\Exception $Exception) {
                 QUI\System\Log::writeException($Exception);
             }
@@ -445,7 +447,7 @@ class Client
         $cachePath = $this->settings['cachePath'];
 
         if (!empty($cachePath) && is_dir($cachePath) && is_readable($cachePath)) {
-            $cacheFile = rtrim($cachePath, '/').'/cache_'.$name;
+            $cacheFile = rtrim($cachePath, '/') . '/cache_' . $name;
 
             if (!file_exists($cacheFile) || !is_readable($cacheFile)) {
                 return false;
@@ -457,7 +459,7 @@ class Client
         // try to use QUIQQER cache manager
         if (class_exists(QUIQQERCacheManager::class)) {
             try {
-                return QUIQQERCacheManager::get($this->quiqqerCachePrefix.$name);
+                return QUIQQERCacheManager::get($this->quiqqerCachePrefix . $name);
             } catch (\Exception $Exception) {
                 return false;
             }

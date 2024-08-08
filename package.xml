@@ -1,0 +1,24 @@
+<quiqqer>
+    <package>
+        <title>
+            QUIQQER - OAuth Client
+        </title>
+
+        <description>
+            QUIQQER OAuth Client
+        </description>
+
+        <support>
+            <email>support@pcsg.de</email>
+            <issues>https://dev.quiqqer.com/quiqqer/quiqqer/issues</issues>
+            <wiki>https://dev.quiqqer.com/quiqqer/quiqqer/wikis/home</wiki>
+            <source>https://dev.quiqqer.com/quiqqer/quiqqer/tree/master</source>
+        </support>
+
+        <copyright>
+            <name>PCSG - Computer & Internet Service OHG</name>
+            <license>GPL-3.0+</license>
+            <license>PCSG QL-1.0</license>
+        </copyright>
+    </package>
+</quiqqer>

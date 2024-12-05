@@ -8,9 +8,12 @@ use QUI;
 use QUI\Cache\Manager as QUIQQERCacheManager;
 
 use function class_exists;
+use function http_build_query;
 use function is_array;
 use function json_decode;
+use function json_encode;
 use function json_validate;
+use function array_merge;
 
 /**
  * REST API Client for QUIQQER REST APIs
@@ -67,60 +70,17 @@ class Client
      * @param array $params (optional) - GET parameters
      * @param bool $authentication (optional) - Perform OAuth 2.0 authentication; this is TRUE by default
      * but may be disabled if a REST API endpoint does not require authentication
-     * @return string - Response data
+     * @return string|array - Response data
      */
-    public function getRequest(string $path, array $params = [], bool $authentication = true): string
+    public function getRequest(string $path, array $params = [], bool $authentication = true): string|array
     {
-        $path = ltrim($path, '/');
-        $requestUrl = $this->baseUrl . $path;
-
-        if ($authentication) {
-            try {
-                $params['access_token'] = $this->getAccessToken()->getToken();
-            } catch (\Exception $exception) {
-                return $this->getExceptionResponse($exception);
-            }
-        }
-
-        $requestUrl .= '?' . http_build_query($params);
-
-        $Request = $this->Provider->getRequest(
-            'GET',
-            $requestUrl
+        return $this->request(
+            "GET",
+            $path,
+            $params,
+            null,
+            $authentication
         );
-
-        try {
-            $response = $this->Provider->getResponse($Request);
-
-            if ($this->settings->retryOn503 && $response->getStatusCode() === 503 && !$this->failureRetry) {
-                $this->failureRetry = true;
-                sleep(1);
-                return $this->getRequest($path, $params, $authentication);
-            }
-        } catch (\GuzzleHttp\Exception\ClientException $exception) {
-            if ($this->settings->retryOn503 && $exception->getCode() === 503 && !$this->failureRetry) {
-                $this->failureRetry = true;
-                sleep(1);
-                return $this->getRequest($path, $params, $authentication);
-            }
-
-            $this->failureRetry = false;
-
-            return $this->getExceptionResponse(
-                new \Exception(
-                    $exception->getResponse()->getBody()->getContents(),
-                    $exception->getCode()
-                )
-            );
-        } catch (\Exception $exception) {
-            $this->failureRetry = false;
-
-            return $this->getExceptionResponse($exception);
-        }
-
-        $this->failureRetry = false;
-
-        return $response->getBody()->getContents();
     }
 
     /**
@@ -130,78 +90,17 @@ class Client
      * @param string|array|null $data (optional) - Additional POST data
      * @param bool $authentication (optional) - Perform OAuth 2.0 authentication; this is TRUE by default
      * but may be disabled if a REST API endpoint does not require authentication
-     * @return string - Response data
+     * @return string|array - Response data
      */
-    public function postRequest(string $path, string|array|null $data = null, bool $authentication = true): string
+    public function postRequest(string $path, string|array|null $data = null, bool $authentication = true): string|array
     {
-        $path = ltrim($path, '/');
-        $requestUrl = $this->baseUrl . $path;
-
-        if ($authentication) {
-            try {
-                $query = http_build_query([
-                    'access_token' => $this->getAccessToken()->getToken()
-                ]);
-
-                $requestUrl .= '?' . $query;
-            } catch (\Exception $Exception) {
-                return $this->getExceptionResponse($Exception);
-            }
-        }
-
-        if (is_array($data)) {
-            $data = json_encode($data);
-        }
-
-        if ($this->isJson($data)) {
-            $contentType = 'application/json';
-        } else {
-            $contentType = 'application/x-www-form-urlencoded';
-        }
-
-        $Request = $this->Provider->getRequest(
-            'POST',
-            $requestUrl,
-            [
-                'headers' => [
-                    'Content-Type' => $contentType
-                ],
-                'body' => $data
-            ]
+        return $this->request(
+            "POST",
+            $path,
+            null,
+            $data,
+            $authentication
         );
-
-        try {
-            $response = $this->Provider->getResponse($Request);
-
-            if ($this->settings->retryOn503 && $response->getStatusCode() === 503 && !$this->failureRetry) {
-                $this->failureRetry = true;
-                sleep(1);
-                return $this->postRequest($path, $data, $authentication);
-            }
-        } catch (\GuzzleHttp\Exception\ClientException $Exception) {
-            if ($this->settings->retryOn503 && $Exception->getCode() === 503 && !$this->failureRetry) {
-                $this->failureRetry = true;
-                sleep(1);
-                return $this->postRequest($path, $data, $authentication);
-            }
-
-            $this->failureRetry = false;
-
-            return $this->getExceptionResponse(
-                new \Exception(
-                    $Exception->getResponse()->getBody()->getContents(),
-                    $Exception->getCode()
-                )
-            );
-        } catch (\Exception $Exception) {
-            $this->failureRetry = false;
-
-            return $this->getExceptionResponse($Exception);
-        }
-
-        $this->failureRetry = false;
-
-        return $response->getBody()->getContents();
     }
 
     /**
@@ -209,56 +108,64 @@ class Client
      *
      * @param string $method - POST, GET, PUT, PATCH, DELETE
      * @param string $path - Request path
-     * @param string|array|null $data (optional) - Additional POST data
+     * @param array|null $getParams (optional)
+     * @param string|array|null $body (optional) - Additional POST data
      * @param bool $authentication (optional) - Perform OAuth 2.0 authentication; this is TRUE by default
      * but may be disabled if a REST API endpoint does not require authentication
-     * @return string - Response data
+     * @return string|array - Response data
      */
     public function request(
         string $method,
         string $path,
-        string|array|null $data = null,
+        ?array $getParams = null,
+        string|array|null $body = null,
         bool $authentication = true
-    ): string {
+    ): string|array {
         $path = ltrim($path, '/');
         $requestUrl = $this->baseUrl . $path;
 
         if ($authentication) {
             try {
-                $query = http_build_query(
-                    \array_merge(
-                        $this->globalRequestParams,
-                        [
-                            'access_token' => $this->getAccessToken()->getToken()
-                        ]
-                    )
-                );
-
-                $requestUrl .= '?' . $query;
+                $getParams['access_token'] = $this->getAccessToken()->getToken();
             } catch (\Exception $exception) {
                 return $this->getExceptionResponse($exception);
             }
         }
 
-        if (is_array($data)) {
-            $data = json_encode($data);
+        $queryParams = array_merge(
+                $getParams ?: [],
+                $this->globalRequestParams,
+            );
+
+        if (!empty($queryParams)) {
+            $query = http_build_query($queryParams);
+            $requestUrl .= '?' . $query;
         }
 
-        if ($this->isJson($data)) {
-            $contentType = 'application/json';
-        } else {
-            $contentType = 'application/x-www-form-urlencoded';
+        $requestOptions = [];
+
+        if (!is_null($body)) {
+            if ($this->isJson($body)) {
+                $contentType = 'application/json';
+            } else {
+                $contentType = 'application/x-www-form-urlencoded';
+            }
+
+            if (is_array($body)) {
+                $body = json_encode($body);
+            }
+
+            $requestOptions['headers'] = [
+                'Content-Type' => $contentType
+            ];
+
+            $requestOptions['body'] = $body;
         }
 
         $Request = $this->Provider->getRequest(
             $method,
             $requestUrl,
-            \array_merge([
-                'headers' => [
-                    'Content-Type' => $contentType
-                ],
-                'body' => $data,
-            ])
+            $requestOptions
         );
 
         try {
@@ -267,13 +174,13 @@ class Client
             if ($this->settings->retryOn503 && $response->getStatusCode() === 503 && !$this->failureRetry) {
                 $this->failureRetry = true;
                 sleep(1);
-                return $this->postRequest($path, $data, $authentication);
+                return $this->postRequest($path, $body, $authentication);
             }
         } catch (\GuzzleHttp\Exception\ClientException $exception) {
             if ($this->settings->retryOn503 && $exception->getCode() === 503 && !$this->failureRetry) {
                 $this->failureRetry = true;
                 sleep(1);
-                return $this->postRequest($path, $data, $authentication);
+                return $this->postRequest($path, $body, $authentication);
             }
 
             $this->failureRetry = false;
@@ -292,7 +199,13 @@ class Client
 
         $this->failureRetry = false;
 
-        return $response->getBody()->getContents();
+        $responseBody = $response->getBody()->getContents();
+
+        if (!$this->settings->jsonDecodeResponseBody || !json_validate($responseBody)) {
+            return $responseBody;
+        }
+
+        return json_decode($responseBody, true);
     }
 
     /**

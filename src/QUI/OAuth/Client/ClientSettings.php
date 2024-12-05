@@ -26,12 +26,15 @@ readonly class ClientSettings
      *  Retry POST/GET request ONCE if a 503 response is returned.
      *  Waits 1 second before retrying.
      *
+     * @param bool $jsonDecodeResponseBody - Decode the response body as JSON (if valid JSON)
+     *
      * @throws ClientException
      */
     public function __construct(
         public ?string $cachePath = null,
         public int $timeout = 60,
-        public bool $retryOn503 = true
+        public bool $retryOn503 = true,
+        public bool $jsonDecodeResponseBody = false
     ) {
         if (!is_null($this->cachePath)) {
             if (!is_dir($this->cachePath) || !is_writable($this->cachePath) || !is_readable($this->cachePath)) {

@@ -1,24 +1,24 @@
 include:
-  - component: dev.quiqqer.com/quiqqer/stabilization/ci-cd-components/quiqqer-package-bundle/quiqqer-package-bundle@2
+  - component: dev.quiqqer.com/quiqqer/stabilization/ci-cd-components/php-syntax-check/php-syntax-check@1
     inputs:
-      quiqqer-major-version: 2
+      php-version: "8.2"
+  - component: dev.quiqqer.com/quiqqer/stabilization/ci-cd-components/php-syntax-check/php-syntax-check@1
+    inputs:
+      php-version: "8.3"
+  - component: dev.quiqqer.com/quiqqer/stabilization/ci-cd-components/phpcs/phpcs@3
+  - component: dev.quiqqer.com/quiqqer/stabilization/ci-cd-components/composer-validation/composer-validation@1
+  - component: dev.quiqqer.com/quiqqer/stabilization/ci-cd-components/phpstan/phpstan@1
+    inputs:
+      install-package-into-quiqqer: false
+  - component: dev.quiqqer.com/quiqqer/stabilization/ci-cd-components/release/release@2
+  - component: dev.quiqqer.com/quiqqer/stabilization/ci-cd-components/branch-organizer/branch-organizer@2
 
-# Remove the entire phpunit-php8.1 block, to allow PHPUnit to run on PHP 8.1 in your pipeline
-phpunit-php8.1:
-  rules:
-    - when: never
+stages:
+  - lint
+  - test
+  - release
 
-# Remove the entire phpunit-php8.2 block, to allow PHPUnit to run on PHP 8.2 in your pipeline
-phpunit-php8.2:
-  rules:
-    - when: never
-
-# Remove the entire phpunit-php8.3 block, to allow PHPUnit to run on PHP 8.3 in your pipeline
-phpunit-php8.3:
-  rules:
-    - when: never
-
-# Disable unnecessary php syntax checks
-php-syntax-check-8.1:
-  rules:
-    - when: never
+phpstan:
+  before_script:
+    # Replace this with a globally installed version in the Docker image (once it's available)
+    - /var/www/html/var/composer/composer.phar install

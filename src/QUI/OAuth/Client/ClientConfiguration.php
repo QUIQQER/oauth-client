@@ -22,8 +22,7 @@ class ClientConfiguration
         #[SensitiveParameter] public readonly string $clientId,
         #[SensitiveParameter] public readonly string $clientSecret,
         public ?ClientSettings $settings = null
-    )
-    {
+    ) {
         if (empty($this->baseUrl)) {
             throw new ClientException(
                 'Please provide a valid REST API URL.'

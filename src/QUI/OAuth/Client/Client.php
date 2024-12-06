@@ -7,13 +7,13 @@ use League\OAuth2\Client\Token\AccessToken;
 use QUI;
 use QUI\Cache\Manager as QUIQQERCacheManager;
 
+use function array_merge;
 use function class_exists;
 use function http_build_query;
 use function is_array;
 use function json_decode;
 use function json_encode;
 use function json_validate;
-use function array_merge;
 
 /**
  * REST API Client for QUIQQER REST APIs
@@ -133,9 +133,9 @@ class Client
         }
 
         $queryParams = array_merge(
-                $getParams ?: [],
-                $this->globalRequestParams,
-            );
+            $getParams ?: [],
+            $this->globalRequestParams,
+        );
 
         if (!empty($queryParams)) {
             $query = http_build_query($queryParams);

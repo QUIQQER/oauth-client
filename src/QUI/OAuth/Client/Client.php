@@ -174,13 +174,13 @@ class Client
             if ($this->settings->retryOn503 && $response->getStatusCode() === 503 && !$this->failureRetry) {
                 $this->failureRetry = true;
                 sleep(1);
-                return $this->postRequest($path, $body, $authentication);
+                return $this->request($path, $path, $getParams, $body, $authentication);
             }
         } catch (\GuzzleHttp\Exception\ClientException $exception) {
             if ($this->settings->retryOn503 && $exception->getCode() === 503 && !$this->failureRetry) {
                 $this->failureRetry = true;
                 sleep(1);
-                return $this->postRequest($path, $body, $authentication);
+                return $this->request($path, $path, $getParams, $body, $authentication);
             }
 
             $this->failureRetry = false;

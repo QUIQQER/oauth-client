@@ -11,6 +11,7 @@ use function array_merge;
 use function class_exists;
 use function http_build_query;
 use function is_array;
+use function is_string;
 use function json_decode;
 use function json_encode;
 use function json_validate;
@@ -145,14 +146,13 @@ class Client
         $requestOptions = [];
 
         if (!is_null($body)) {
-            if ($this->isJson($body)) {
-                $contentType = 'application/json';
-            } else {
-                $contentType = 'application/x-www-form-urlencoded';
-            }
+            $contentType = 'application/x-www-form-urlencoded';
 
             if (is_array($body)) {
                 $body = json_encode($body);
+                $contentType = 'application/json';
+            } elseif (is_string($body) && $this->isJson($body)) {
+                $contentType = 'application/json';
             }
 
             $requestOptions['headers'] = [

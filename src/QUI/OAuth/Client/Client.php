@@ -230,10 +230,10 @@ class Client
     /**
      * Get AccessToken
      *
-     * @return AccessToken
+     * @return AccessTokenInterface
      * @throws IdentityProviderException
      */
-    protected function getAccessToken(): AccessToken
+    protected function getAccessToken(): AccessTokenInterface
     {
         if (!is_null($this->Token) && !$this->Token->hasExpired()) {
             return $this->Token;

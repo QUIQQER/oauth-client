@@ -4,6 +4,7 @@ namespace QUI\OAuth\Client;
 
 use League\OAuth2\Client\Provider\Exception\IdentityProviderException;
 use League\OAuth2\Client\Token\AccessToken;
+use League\OAuth2\Client\Token\AccessTokenInterface;
 use QUI;
 use QUI\Cache\Manager as QUIQQERCacheManager;
 
@@ -25,7 +26,7 @@ class Client
      * REST API base url
      */
     protected string $baseUrl;
-    protected ?AccessToken $Token = null;
+    protected ?AccessTokenInterface $Token = null;
     protected Provider $Provider;
     protected ClientSettings $settings;
 
@@ -340,7 +341,7 @@ class Client
     /**
      * Check if a string is in JSON format
      *
-     * @param mixed $str
+     * @param string $str
      * @return bool
      */
     protected function isJson(string $str): bool

@@ -1,0 +1,24 @@
+include:
+  - component: dev.quiqqer.com/quiqqer/stabilization/ci-cd-components/php-syntax-check/php-syntax-check@1
+    inputs:
+      php-version: "8.2"
+  - component: dev.quiqqer.com/quiqqer/stabilization/ci-cd-components/php-syntax-check/php-syntax-check@1
+    inputs:
+      php-version: "8.3"
+  - component: dev.quiqqer.com/quiqqer/stabilization/ci-cd-components/phpcs/phpcs@3
+  - component: dev.quiqqer.com/quiqqer/stabilization/ci-cd-components/composer-validation/composer-validation@1
+  - component: dev.quiqqer.com/quiqqer/stabilization/ci-cd-components/phpstan/phpstan@1
+    inputs:
+      install-package-into-quiqqer: false
+  - component: dev.quiqqer.com/quiqqer/stabilization/ci-cd-components/release/release@2
+  - component: dev.quiqqer.com/quiqqer/stabilization/ci-cd-components/branch-organizer/branch-organizer@2
+
+stages:
+  - lint
+  - test
+  - release
+
+phpstan:
+  before_script:
+    # Replace this with a globally installed version in the Docker image (once it's available)
+    - /var/www/html/var/composer/composer.phar install

@@ -2,122 +2,64 @@
 
 namespace QUI\OAuth\Client;
 
+use League\OAuth2\Client\Provider\Exception\IdentityProviderException;
 use League\OAuth2\Client\Token\AccessToken;
+use League\OAuth2\Client\Token\AccessTokenInterface;
 use QUI;
 use QUI\Cache\Manager as QUIQQERCacheManager;
+
+use function array_merge;
+use function class_exists;
+use function http_build_query;
 use function is_array;
 use function is_string;
 use function json_decode;
-use function json_last_error;
-use const JSON_ERROR_NONE;
+use function json_encode;
+use function json_validate;
 
 /**
- * REST API Client for CleverReach
+ * REST API Client for QUIQQER REST APIs
  */
 class Client
 {
     /**
      * REST API base url
-     *
-     * @var string
      */
-    protected $baseUrl;
-
-    /**
-     * OAuth Client ID
-     *
-     * @var string
-     */
-    protected $clientId;
-
-    /**
-     * @var AccessToken
-     */
-    protected $Token = null;
-
-    /**
-     * @var Provider
-     */
-    protected $Provider;
+    protected string $baseUrl;
+    protected ?AccessTokenInterface $Token = null;
+    protected Provider $Provider;
+    protected ClientSettings $settings;
 
     /**
      * Cache name prefix for data that is cached in the QUIQQER cache
-     *
-     * @var string
      */
-    protected $quiqqerCachePrefix = 'quiqqer/oauth-client/cache/';
-
-    /**
-     * Client settings
-     *
-     * @var array
-     */
-    protected $settings = [];
+    protected string $quiqqerCachePrefix = 'quiqqer/oauth-client/cache/';
 
     /**
      * Flag that indicates if a request has been retried ONCE.
-     *
-     * @var bool
      */
-    protected $failureRetry = false;
+    protected bool $failureRetry = false;
 
     /**
      * Globals parameters that are sent with every request.
-     *
-     * @var array
      */
-    protected $globalRequestParams = [];
+    protected array $globalRequestParams = [];
 
     /**
      * Client constructor.
      *
-     * @param string $baseUrl - The base URL for the REST API
-     * @param string $clientId (optional) - OAuth Client-ID
-     * @param string $clientSecret (optional) - OAuth Client secret
-     * @param array $settings (optional) - Additional client settings
-     * @throws ClientException
+     * @param ClientConfiguration $configuration
      */
-    public function __construct($baseUrl, $clientId = null, $clientSecret = null, $settings = [])
+    public function __construct(private readonly ClientConfiguration $configuration)
     {
-        if (empty($baseUrl)) {
-            throw new ClientException(
-                'Please provide a valid REST API URL.'
-            );
-        }
-
-        $defaultSettings = [
-            /**
-             * Writable cache path where access tokens are stored in a file
-             *
-             * If this is set to false, the client will check if QUIQQER is installed and cache
-             * it via the QUIQQER cache manager.
-             *
-             * If in this case QUIQQER is not installed, access tokens are not cached and are
-             * retrieved freshly for every REST request (if authentication is required)
-             */
-            'cachePath'  => false,
-
-            /**
-             * Default request timeout in seconds
-             */
-            'timeout'    => 60,
-
-            /**
-             * Retry POST/GET request ONCE if a 503 response is returned.
-             *
-             * Waits 1 second before retrying.
-             */
-            'retryOn503' => true
-        ];
-
-        $this->settings = array_merge($defaultSettings, $settings);
-        $this->baseUrl  = rtrim($baseUrl, '/').'/'; // ensure trailing slash
-        $this->clientId = $clientId;
+//        $this->settings = array_merge($defaultSettings, $settings);
+        $this->settings = $this->configuration->settings;
+        $this->baseUrl = rtrim($this->configuration->baseUrl, '/') . '/'; // ensure trailing slash
 
         $this->Provider = new Provider([
-            'clientId'     => $clientId,
-            'clientSecret' => $clientSecret,
-            'timeout'      => (int)$this->settings['timeout']
+            'clientId' => $configuration->clientId,
+            'clientSecret' => $configuration->clientSecret,
+            'timeout' => $configuration->settings->timeout
         ]);
 
         $this->Provider->setBaseUrl($this->baseUrl);
@@ -130,141 +72,37 @@ class Client
      * @param array $params (optional) - GET parameters
      * @param bool $authentication (optional) - Perform OAuth 2.0 authentication; this is TRUE by default
      * but may be disabled if a REST API endpoint does not require authentication
-     * @return string - Response data
+     * @return string|array - Response data
      */
-    public function getRequest(string $path, array $params = [], $authentication = true)
+    public function getRequest(string $path, array $params = [], bool $authentication = true): string|array
     {
-        $path       = ltrim($path, '/');
-        $requestUrl = $this->baseUrl.$path;
-
-        if ($authentication) {
-            try {
-                $params['access_token'] = $this->getAccessToken()->getToken();
-            } catch (\Exception $Exception) {
-                return $this->getExceptionResponse($Exception);
-            }
-        }
-
-        $requestUrl .= '?'.http_build_query($params);
-
-        $Request = $this->Provider->getRequest(
-            'GET',
-            $requestUrl
+        return $this->request(
+            "GET",
+            $path,
+            $params,
+            null,
+            $authentication
         );
-
-        try {
-            $Response = $this->Provider->getResponse($Request);
-
-            if ($this->settings['retryOn503'] && $Response->getStatusCode() === 503 && !$this->failureRetry) {
-                $this->failureRetry = true;
-                sleep(1);
-                return $this->getRequest($path, $params, $authentication);
-            }
-        } catch (\Exception $Exception) {
-            if ($Exception instanceof \GuzzleHttp\Exception\ClientException) {
-                if ($this->settings['retryOn503'] && $Exception->getCode() === 503 && !$this->failureRetry) {
-                    $this->failureRetry = true;
-                    sleep(1);
-                    return $this->getRequest($path, $params, $authentication);
-                }
-
-                $this->failureRetry = false;
-
-                return $this->getExceptionResponse(new \Exception(
-                    $Exception->getResponse()->getBody()->getContents(),
-                    $Exception->getCode()
-                ));
-            } else {
-                $this->failureRetry = false;
-
-                return $this->getExceptionResponse($Exception);
-            }
-        }
-
-        $this->failureRetry = false;
-
-        return $Response->getBody()->getContents();
     }
 
     /**
      * Perform a POST request
      *
      * @param string $path - Request path
-     * @param string|array $data (optional) - Additional POST data
+     * @param string|array|null $data (optional) - Additional POST data
      * @param bool $authentication (optional) - Perform OAuth 2.0 authentication; this is TRUE by default
      * but may be disabled if a REST API endpoint does not require authentication
-     * @return string - Response data
+     * @return string|array - Response data
      */
-    public function postRequest(string $path, $data = null, $authentication = true)
+    public function postRequest(string $path, string|array|null $data = null, bool $authentication = true): string|array
     {
-        $path       = ltrim($path, '/');
-        $requestUrl = $this->baseUrl.$path;
-
-        if ($authentication) {
-            try {
-                $query = http_build_query([
-                    'access_token' => $this->getAccessToken()->getToken()
-                ]);
-
-                $requestUrl .= '?'.$query;
-            } catch (\Exception $Exception) {
-                return $this->getExceptionResponse($Exception);
-            }
-        }
-
-        if (is_array($data)) {
-            $data = json_encode($data);
-        }
-
-        if ($this->isJson($data)) {
-            $contentType = 'application/json';
-        } else {
-            $contentType = 'application/x-www-form-urlencoded';
-        }
-
-        $Request = $this->Provider->getRequest(
-            'POST',
-            $requestUrl,
-            [
-                'headers' => [
-                    'Content-Type' => $contentType
-                ],
-                'body'    => $data
-            ]
+        return $this->request(
+            "POST",
+            $path,
+            null,
+            $data,
+            $authentication
         );
-
-        try {
-            $Response = $this->Provider->getResponse($Request);
-
-            if ($this->settings['retryOn503'] && $Response->getStatusCode() === 503 && !$this->failureRetry) {
-                $this->failureRetry = true;
-                sleep(1);
-                return $this->postRequest($path, $data, $authentication);
-            }
-        } catch (\Exception $Exception) {
-            if ($Exception instanceof \GuzzleHttp\Exception\ClientException) {
-                if ($this->settings['retryOn503'] && $Exception->getCode() === 503 && !$this->failureRetry) {
-                    $this->failureRetry = true;
-                    sleep(1);
-                    return $this->postRequest($path, $data, $authentication);
-                }
-
-                $this->failureRetry = false;
-
-                return $this->getExceptionResponse(new \Exception(
-                    $Exception->getResponse()->getBody()->getContents(),
-                    $Exception->getCode()
-                ));
-            } else {
-                $this->failureRetry = false;
-
-                return $this->getExceptionResponse($Exception);
-            }
-        }
-
-        $this->failureRetry = false;
-
-        return $Response->getBody()->getContents();
     }
 
     /**
@@ -272,86 +110,103 @@ class Client
      *
      * @param string $method - POST, GET, PUT, PATCH, DELETE
      * @param string $path - Request path
-     * @param string|array $data (optional) - Additional POST data
+     * @param array|null $getParams (optional)
+     * @param string|array|null $body (optional) - Additional POST data
      * @param bool $authentication (optional) - Perform OAuth 2.0 authentication; this is TRUE by default
      * but may be disabled if a REST API endpoint does not require authentication
-     * @return string - Response data
+     * @return string|array - Response data
      */
-    public function request(string $method, string $path, $data = null, bool $authentication = true): string
-    {
-        $path       = ltrim($path, '/');
-        $requestUrl = $this->baseUrl.$path;
+    public function request(
+        string $method,
+        string $path,
+        ?array $getParams = null,
+        string|array|null $body = null,
+        bool $authentication = true
+    ): string|array {
+        $path = ltrim($path, '/');
+        $requestUrl = $this->baseUrl . $path;
 
         if ($authentication) {
             try {
-                $query = http_build_query(
-                    \array_merge(
-                        $this->globalRequestParams,
-                        [
-                            'access_token' => $this->getAccessToken()->getToken()
-                        ]
-                    )
-                );
-
-                $requestUrl .= '?'.$query;
-            } catch (\Exception $Exception) {
-                return $this->getExceptionResponse($Exception);
+                $getParams['access_token'] = $this->getAccessToken()->getToken();
+            } catch (\Exception $exception) {
+                return $this->getExceptionResponse($exception);
             }
         }
 
-        if (is_array($data)) {
-            $data = json_encode($data);
+        $queryParams = array_merge(
+            $getParams ?: [],
+            $this->globalRequestParams,
+        );
+
+        if (!empty($queryParams)) {
+            $query = http_build_query($queryParams);
+            $requestUrl .= '?' . $query;
         }
 
-        if ($this->isJson($data)) {
-            $contentType = 'application/json';
-        } else {
+        $requestOptions = [];
+
+        if (!is_null($body)) {
             $contentType = 'application/x-www-form-urlencoded';
+
+            if (is_array($body)) {
+                $body = json_encode($body);
+                $contentType = 'application/json';
+            } elseif (is_string($body) && $this->isJson($body)) {
+                $contentType = 'application/json';
+            }
+
+            $requestOptions['headers'] = [
+                'Content-Type' => $contentType
+            ];
+
+            $requestOptions['body'] = $body;
         }
 
         $Request = $this->Provider->getRequest(
             $method,
             $requestUrl,
-            \array_merge([
-                'headers' => [
-                    'Content-Type' => $contentType
-                ],
-                'body'    => $data,
-            ])
+            $requestOptions
         );
 
         try {
-            $Response = $this->Provider->getResponse($Request);
+            $response = $this->Provider->getResponse($Request);
 
-            if ($this->settings['retryOn503'] && $Response->getStatusCode() === 503 && !$this->failureRetry) {
+            if ($this->settings->retryOn503 && $response->getStatusCode() === 503 && !$this->failureRetry) {
                 $this->failureRetry = true;
                 sleep(1);
-                return $this->postRequest($path, $data, $authentication);
+                return $this->request($path, $path, $getParams, $body, $authentication);
             }
-        } catch (\Exception $Exception) {
-            if ($Exception instanceof \GuzzleHttp\Exception\ClientException) {
-                if ($this->settings['retryOn503'] && $Exception->getCode() === 503 && !$this->failureRetry) {
-                    $this->failureRetry = true;
-                    sleep(1);
-                    return $this->postRequest($path, $data, $authentication);
-                }
-
-                $this->failureRetry = false;
-
-                return $this->getExceptionResponse(new \Exception(
-                    $Exception->getResponse()->getBody()->getContents(),
-                    $Exception->getCode()
-                ));
-            } else {
-                $this->failureRetry = false;
-
-                return $this->getExceptionResponse($Exception);
+        } catch (\GuzzleHttp\Exception\ClientException $exception) {
+            if ($this->settings->retryOn503 && $exception->getCode() === 503 && !$this->failureRetry) {
+                $this->failureRetry = true;
+                sleep(1);
+                return $this->request($path, $path, $getParams, $body, $authentication);
             }
+
+            $this->failureRetry = false;
+
+            return $this->getExceptionResponse(
+                new \Exception(
+                    $exception->getResponse()->getBody()->getContents(),
+                    $exception->getCode()
+                )
+            );
+        } catch (\Exception $exception) {
+            $this->failureRetry = false;
+
+            return $this->getExceptionResponse($exception);
         }
 
         $this->failureRetry = false;
 
-        return $Response->getBody()->getContents();
+        $responseBody = $response->getBody()->getContents();
+
+        if (!$this->settings->jsonDecodeResponseBody || !json_validate($responseBody)) {
+            return $responseBody;
+        }
+
+        return json_decode($responseBody, true);
     }
 
     /**
@@ -375,16 +230,17 @@ class Client
     /**
      * Get AccessToken
      *
-     * @return AccessToken
+     * @return AccessTokenInterface
+     * @throws IdentityProviderException
      */
-    protected function getAccessToken()
+    protected function getAccessToken(): AccessTokenInterface
     {
         if (!is_null($this->Token) && !$this->Token->hasExpired()) {
             return $this->Token;
         }
 
         // check token cache
-        $cacheName = 'access_token_'.$this->clientId;
+        $cacheName = 'access_token_' . $this->configuration->clientId;
         $tokenData = $this->readFromCache($cacheName);
 
         if (!empty($tokenData)) {
@@ -406,29 +262,31 @@ class Client
     }
 
     /**
-     * Write data to a cache file or the QUIQQER cache
+     * Write data to a cache file OR the QUIQQER cache (if QUIQQER is installed)
      *
      * @param string $name - Cache data identifier
      * @param string $data - Cache data
      * @return void
      */
-    protected function writeToCache(string $name, string $data)
+    protected function writeToCache(string $name, string $data): void
     {
         // try to use filesystem
-        $cachePath = $this->settings['cachePath'];
+        $cachePath = $this->settings->cachePath;
 
-        if (!empty($cachePath) && is_dir($cachePath) && is_writable($cachePath)) {
-            $cacheFile = rtrim($cachePath, '/').'/cache_'.$name;
+        if (!empty($cachePath)) {
+            $cacheFile = rtrim($cachePath, '/') . '/cache_' . $name;
             file_put_contents($cacheFile, $data);
             return;
         }
 
         // try to use QUIQQER cache manager
-        if (class_exists(QUIQQERCacheManager::class)) {
+        if (class_exists('QUI\Cache\Manager')) {
             try {
-                QUIQQERCacheManager::set($this->quiqqerCachePrefix.$name, $data);
+                QUIQQERCacheManager::set($this->quiqqerCachePrefix . $name, $data);
             } catch (\Exception $Exception) {
-                QUI\System\Log::writeException($Exception);
+                if (class_exists('QUI\System\Log')) {
+                    QUI\System\Log::writeException($Exception);
+                }
             }
         }
     }
@@ -437,63 +295,57 @@ class Client
      * Read data from a cache file or the QUIQQER cache
      *
      * @param string $name - Cache data identifier
-     * @return  string|false - Cache data or false if not found/cached
+     * @return  string|null - Cache data or false if not found/cached
      */
-    protected function readFromCache(string $name)
+    protected function readFromCache(string $name): string|null
     {
         // try to use filesystem
-        $cachePath = $this->settings['cachePath'];
+        $cachePath = $this->settings->cachePath;
 
-        if (!empty($cachePath) && is_dir($cachePath) && is_readable($cachePath)) {
-            $cacheFile = rtrim($cachePath, '/').'/cache_'.$name;
+        if (!empty($cachePath)) {
+            $cacheFile = rtrim($cachePath, '/') . '/cache_' . $name;
 
             if (!file_exists($cacheFile) || !is_readable($cacheFile)) {
-                return false;
+                return null;
             }
 
             return file_get_contents($cacheFile);
         }
 
-        // try to use QUIQQER cache manager
-        if (class_exists(QUIQQERCacheManager::class)) {
+        if (class_exists('QUI\Cache\Manager')) {
             try {
-                return QUIQQERCacheManager::get($this->quiqqerCachePrefix.$name);
-            } catch (\Exception $Exception) {
-                return false;
+                return QUIQQERCacheManager::get($this->quiqqerCachePrefix . $name);
+            } catch (\Exception $exception) {
+                return null;
             }
         }
 
-        return false;
+        return null;
     }
 
     /**
-     * Get a response from an exception
+     * Get a response string from an exception
      *
      * @param \Exception $Exception
      * @return string - JSON
      */
-    protected function getExceptionResponse(\Exception $Exception)
+    protected function getExceptionResponse(\Exception $Exception): string
     {
         return json_encode([
-            'error'             => true,
+            'error' => true,
             'error_description' => $Exception->getMessage(),
-            'error_code'        => $Exception->getCode()
+            'error_code' => $Exception->getCode()
         ]);
     }
 
     /**
      * Check if a string is in JSON format
      *
-     * @param mixed $str
+     * @param string $str
      * @return bool
      */
-    protected function isJson($str): bool
+    protected function isJson(string $str): bool
     {
-        if (!is_string($str)) {
-            return false;
-        }
-
-        $str = json_decode($str, true);
-        return json_last_error() === JSON_ERROR_NONE && is_array($str);
+        return json_validate($str);
     }
 }

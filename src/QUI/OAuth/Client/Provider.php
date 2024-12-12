@@ -15,7 +15,7 @@ class Provider extends AbstractProvider
      *
      * @var string
      */
-    protected $baseUrl;
+    protected string $baseUrl = '';
 
     /**
      * @return string
@@ -30,7 +30,7 @@ class Provider extends AbstractProvider
      */
     public function setBaseUrl(string $baseUrl): void
     {
-        $this->baseUrl = rtrim($baseUrl, '/').'/';  // ensure trailing slash
+        $this->baseUrl = rtrim($baseUrl, '/') . '/';  // ensure trailing slash
     }
 
     /**
@@ -40,7 +40,7 @@ class Provider extends AbstractProvider
      *
      * @return string
      */
-    public function getBaseAuthorizationUrl()
+    public function getBaseAuthorizationUrl(): string
     {
         // Since the only currently supported grant type of quiqqer/oauth-server is "Client Credentials", there is
         // no authorization URL
@@ -55,9 +55,9 @@ class Provider extends AbstractProvider
      * @param array $params
      * @return string
      */
-    public function getBaseAccessTokenUrl(array $params)
+    public function getBaseAccessTokenUrl(array $params): string
     {
-        return $this->baseUrl.'oauth/token';
+        return $this->baseUrl . 'oauth/token';
     }
 
     /**
@@ -66,7 +66,7 @@ class Provider extends AbstractProvider
      * @param AccessToken $token
      * @return string
      */
-    public function getResourceOwnerDetailsUrl(AccessToken $token)
+    public function getResourceOwnerDetailsUrl(AccessToken $token): string
     {
         // This does not exist yet
         return '';
@@ -80,7 +80,7 @@ class Provider extends AbstractProvider
      *
      * @return array
      */
-    protected function getDefaultScopes()
+    protected function getDefaultScopes(): array
     {
         return ['oauth'];
     }
@@ -88,14 +88,14 @@ class Provider extends AbstractProvider
     /**
      * Checks a provider response for errors.
      *
-     * @throws IdentityProviderException
-     * @param  ResponseInterface $Response
-     * @param  array|string $data Parsed response data
+     * @param ResponseInterface $response
+     * @param array|string $data Parsed response data
      * @return void
+     * @throws IdentityProviderException
      */
-    protected function checkResponse(ResponseInterface $Response, $data)
+    protected function checkResponse(ResponseInterface $response, $data): void
     {
-        if ($Response->getStatusCode() === 404) {
+        if ($response->getStatusCode() === 404) {
             throw new IdentityProviderException(
                 'Request path not found. Please check your Client settings.',
                 404,
@@ -108,11 +108,11 @@ class Provider extends AbstractProvider
      * Generates a resource owner object from a successful resource owner
      * details request.
      *
-     * @param  array $response
-     * @param  AccessToken $token
+     * @param array $response
+     * @param AccessToken $token
      * @return ResourceOwnerInterface
      */
-    protected function createResourceOwner(array $response, AccessToken $token)
+    protected function createResourceOwner(array $response, AccessToken $token): ResourceOwnerInterface
     {
         return new ResourceOwner(); // currently placeholder only
     }

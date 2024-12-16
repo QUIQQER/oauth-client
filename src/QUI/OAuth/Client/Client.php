@@ -66,6 +66,31 @@ class Client
     }
 
     /**
+     * Make a test request to the configured OAuth server.
+     *
+     * @return void
+     * @throws ClientException - Thrown if the request fails
+     */
+    public function testRequest(): void
+    {
+        $response = $this->postRequest('/quiqqer_oauth_test');
+
+        if (!$this->configuration->settings->jsonDecodeResponseBody) {
+            if (!json_validate($response)) {
+                throw new ClientException("Test request failed. Response did not contain valid JSON.");
+            }
+
+            $response = json_decode($response, true);
+        }
+
+        if (empty($response['success'])) {
+            if (!json_validate($response)) {
+                throw new ClientException("Test request failed. Response did not return 'success'.");
+            }
+        }
+    }
+
+    /**
      * Perform a GET request
      *
      * @param string $path - Request path

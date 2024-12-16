@@ -82,7 +82,7 @@ class Provider extends AbstractProvider
      */
     protected function getDefaultScopes(): array
     {
-        return ['oauth'];
+        return [];
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace QUI\OAuth\Client;
 
+use League\OAuth2\Client\Provider\AbstractProvider;
 use League\OAuth2\Client\Provider\Exception\IdentityProviderException;
 use League\OAuth2\Client\Token\AccessToken;
 use League\OAuth2\Client\Token\AccessTokenInterface;
@@ -27,8 +28,9 @@ class Client
      */
     protected string $baseUrl;
     protected ?AccessTokenInterface $Token = null;
-    protected Provider $Provider;
     protected ClientSettings $settings;
+
+    private bool $isCustomProvider = false;
 
     /**
      * Cache name prefix for data that is cached in the QUIQQER cache
@@ -49,20 +51,26 @@ class Client
      * Client constructor.
      *
      * @param ClientConfiguration $configuration
+     * @param AbstractProvider|null $provider
      */
-    public function __construct(private readonly ClientConfiguration $configuration)
-    {
+    public function __construct(
+        private readonly ClientConfiguration $configuration,
+        private ?AbstractProvider $provider = null
+    ) {
 //        $this->settings = array_merge($defaultSettings, $settings);
         $this->settings = $this->configuration->settings;
         $this->baseUrl = rtrim($this->configuration->baseUrl, '/') . '/'; // ensure trailing slash
 
-        $this->Provider = new Provider([
-            'clientId' => $configuration->clientId,
-            'clientSecret' => $configuration->clientSecret,
-            'timeout' => $configuration->settings->timeout
-        ]);
-
-        $this->Provider->setBaseUrl($this->baseUrl);
+        if (is_null($this->provider)) {
+            $this->provider = new Provider([
+                'clientId' => $configuration->clientId,
+                'clientSecret' => $configuration->clientSecret,
+                'timeout' => $configuration->settings->timeout
+            ]);
+            $this->provider->setBaseUrl($this->baseUrl);
+        } else {
+            $this->isCustomProvider = true;
+        }
     }
 
     /**
@@ -73,6 +81,12 @@ class Client
      */
     public function testRequest(): void
     {
+        if ($this->isCustomProvider) {
+            throw new ClientException(
+                "Test request not possible with custom provider. Only default QUIQQER provider possible."
+            );
+        }
+
         $response = $this->postRequest('/quiqqer_oauth_test');
 
         if (!$this->configuration->settings->jsonDecodeResponseBody) {
@@ -99,7 +113,7 @@ class Client
      * but may be disabled if a REST API endpoint does not require authentication
      * @return string|array - Response data
      */
-    public function getRequest(string $path, array $params = [], bool $authentication = true): string|array
+    public function getRequest(string $path, array $params = [], bool $authentication = true): string | array
     {
         return $this->request(
             "GET",
@@ -119,8 +133,11 @@ class Client
      * but may be disabled if a REST API endpoint does not require authentication
      * @return string|array - Response data
      */
-    public function postRequest(string $path, string|array|null $data = null, bool $authentication = true): string|array
-    {
+    public function postRequest(
+        string $path,
+        string | array | null $data = null,
+        bool $authentication = true
+    ): string | array {
         return $this->request(
             "POST",
             $path,
@@ -145,9 +162,9 @@ class Client
         string $method,
         string $path,
         ?array $getParams = null,
-        string|array|null $body = null,
+        string | array | null $body = null,
         bool $authentication = true
-    ): string|array {
+    ): string | array {
         $path = ltrim($path, '/');
         $requestUrl = $this->baseUrl . $path;
 
@@ -188,14 +205,14 @@ class Client
             $requestOptions['body'] = $body;
         }
 
-        $Request = $this->Provider->getRequest(
+        $Request = $this->provider->getRequest(
             $method,
             $requestUrl,
             $requestOptions
         );
 
         try {
-            $response = $this->Provider->getResponse($Request);
+            $response = $this->provider->getResponse($Request);
 
             if ($this->settings->retryOn503 && $response->getStatusCode() === 503 && !$this->failureRetry) {
                 $this->failureRetry = true;
@@ -278,7 +295,7 @@ class Client
         }
 
         // create new access token
-        $this->Token = $this->Provider->getAccessToken('client_credentials', $this->globalRequestParams);
+        $this->Token = $this->provider->getAccessToken('client_credentials', $this->globalRequestParams);
 
         // cache token
         $this->writeToCache($cacheName, json_encode($this->Token->jsonSerialize()));
@@ -322,7 +339,7 @@ class Client
      * @param string $name - Cache data identifier
      * @return  string|null - Cache data or false if not found/cached
      */
-    protected function readFromCache(string $name): string|null
+    protected function readFromCache(string $name): string | null
     {
         // try to use filesystem
         $cachePath = $this->settings->cachePath;

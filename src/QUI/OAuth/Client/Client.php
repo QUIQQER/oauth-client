@@ -67,11 +67,10 @@ class Client
                 'clientSecret' => $configuration->clientSecret,
                 'timeout' => $configuration->settings->timeout
             ]);
+            $this->provider->setBaseUrl($this->baseUrl);
         } else {
             $this->isCustomProvider = true;
         }
-
-        $this->provider->setBaseUrl($this->baseUrl);
     }
 
     /**

@@ -5,6 +5,6 @@ parameters:
     level: 5
     paths:
         - src
-    #bootstrapFiles:
-       # - tests/phpstan-bootstrap.php
+    bootstrapFiles:
+        - tests/phpstan-bootstrap.php
     tipsOfTheDay: false
